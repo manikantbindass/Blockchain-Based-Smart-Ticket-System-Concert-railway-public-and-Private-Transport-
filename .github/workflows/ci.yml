@@ -37,6 +37,18 @@ jobs:
         run: npm audit --audit-level=high
       - name: Build production image
         run: docker build -t chainpass:ci .
+      - name: Verify container startup and frontend
+        shell: bash
+        run: |
+          docker run -d --name chainpass-smoke -p 127.0.0.1:4400:4000 \
+            -e NODE_ENV=development -e SEED_DEMO=true -e DEMO_MODE=true chainpass:ci
+          trap 'docker logs chainpass-smoke; docker rm -f chainpass-smoke' EXIT
+          for attempt in {1..20}; do
+            if curl --fail --silent http://127.0.0.1:4400/api/ready; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4400/api/ready
+          curl --fail --silent http://127.0.0.1:4400/ | grep -q ChainPass
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
