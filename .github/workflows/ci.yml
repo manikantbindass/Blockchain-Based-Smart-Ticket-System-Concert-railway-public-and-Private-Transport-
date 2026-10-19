@@ -1,0 +1,45 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_DB: chainpass_test
+          POSTGRES_USER: chainpass
+          POSTGRES_PASSWORD: ci-only-password
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U chainpass -d chainpass_test"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run check
+      - name: PostgreSQL concurrency and API tests
+        run: npm test -w @chainpass/api
+        env:
+          TEST_DATABASE_URL: postgresql://chainpass:ci-only-password@localhost:5432/chainpass_test
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - name: Dependency security gate
+        run: npm audit --audit-level=high
+      - name: Build production image
+        run: docker build -t chainpass:ci .
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: browser-failure-artifacts
+          path: test-results/
+          retention-days: 7

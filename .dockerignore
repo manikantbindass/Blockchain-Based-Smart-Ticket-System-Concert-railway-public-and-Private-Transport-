@@ -1,0 +1,14 @@
+**/node_modules
+**/dist
+**/artifacts
+**/cache
+.git
+.env
+.env.*
+data
+.local
+**/*.log
+**/*.sqlite*
+**/deployments/localhost.json
+test-results
+playwright-report

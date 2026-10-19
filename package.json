@@ -1,0 +1,40 @@
+{
+  "name": "chainpass",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Verifiable tickets for live experiences and everyday journeys",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "engines": {
+    "node": ">=24.0.0 <25"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"npm run dev -w @chainpass/api\" \"npm run dev -w @chainpass/web\"",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "check": "npm run typecheck && npm test && npm run build",
+    "start": "npm run start -w @chainpass/api",
+    "chain:node": "npm run node -w @chainpass/contracts",
+    "chain:deploy": "npm run deploy -w @chainpass/contracts",
+    "chain:compile": "npm run build -w @chainpass/contracts",
+    "worker": "npm run worker -w @chainpass/api",
+    "test:e2e": "playwright test",
+    "organizer:create": "npm run organizer:create -w @chainpass/api"
+  },
+  "overrides": {
+    "tmp": "0.2.7"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "typescript": "^5.9.3",
+    "tsx": "^4.20.6",
+    "@types/node": "^24.10.0",
+    "@playwright/test": "^1.56.1",
+    "prettier": "^3.6.2",
+    "solc": "0.8.37"
+  }
+}

@@ -1,0 +1,13 @@
+# Requires an external TLS reverse proxy. Checkout is disabled by default.
+services:
+  db:
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set a strong database password}
+  app:
+    environment:
+      NODE_ENV: production
+      SEED_DEMO: "false"
+      DEMO_MODE: "false"
+      QR_SECRET: ${QR_SECRET:?Set a unique random signing secret}
+      WEB_ORIGIN: ${WEB_ORIGIN:?Set the exact HTTPS application origin}
+      DATABASE_URL: ${DATABASE_URL:?Set the production PostgreSQL URL, URL-encoding its credentials}

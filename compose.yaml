@@ -1,0 +1,36 @@
+# Local sandbox stack. For hosted environments use the production override.
+services:
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chainpass
+      POSTGRES_USER: chainpass
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-chainpass-local-only}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chainpass -d chainpass"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:4000:4000"
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 4000
+      DATABASE_URL: postgresql://chainpass:${POSTGRES_PASSWORD:-chainpass-local-only}@db:5432/chainpass
+      QR_SECRET: ${QR_SECRET:-development-only-change-this-secret-before-deployment-2026}
+      WEB_ORIGIN: http://127.0.0.1:4000,http://localhost:4000
+      DEMO_MODE: "true"
+      SEED_DEMO: "true"
+      BLOCKCHAIN_ENABLED: "false"
+    depends_on:
+      db:
+        condition: service_healthy
+volumes:
+  postgres-data:
