@@ -140,6 +140,26 @@ const migrations = [
       `CREATE TABLE IF NOT EXISTS checkin_audit (id TEXT PRIMARY KEY, ticket_id TEXT NOT NULL REFERENCES tickets(id), organizer_id TEXT NOT NULL REFERENCES users(id), checked_in_at TEXT NOT NULL)`,
     ],
   },
+  {
+    version: 2,
+    statements: [
+      `CREATE TABLE rail_identity_challenges (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, otp_hash TEXT NOT NULL, name TEXT NOT NULL, date_of_birth TEXT NOT NULL, gender TEXT NOT NULL, document_type TEXT NOT NULL, consent_version TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts BETWEEN 0 AND 5), status TEXT NOT NULL CHECK(status IN ('active','used','replaced')))`,
+      `CREATE INDEX idx_rail_challenges_user ON rail_identity_challenges(user_id,created_at)`,
+      `CREATE TABLE rail_identities (user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, date_of_birth TEXT NOT NULL, gender TEXT NOT NULL, masked_identifier TEXT NOT NULL, verified_at TEXT NOT NULL, consent_version TEXT NOT NULL, consent_at TEXT NOT NULL, challenge_id TEXT NOT NULL REFERENCES rail_identity_challenges(id))`,
+      `CREATE TABLE rail_inventory (id TEXT PRIMARY KEY, train_id TEXT NOT NULL, journey_date TEXT NOT NULL, travel_class TEXT NOT NULL, quota TEXT NOT NULL, capacity INTEGER NOT NULL CHECK(capacity > 0), remaining INTEGER NOT NULL CHECK(remaining >= 0 AND remaining <= capacity), event_id TEXT NOT NULL UNIQUE REFERENCES events(id), UNIQUE(train_id,journey_date,travel_class,quota))`,
+      `CREATE TABLE rail_reservations (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), pnr TEXT NOT NULL UNIQUE, inventory_id TEXT NOT NULL REFERENCES rail_inventory(id), contact_email TEXT NOT NULL, contact_mobile TEXT NOT NULL, payment_method TEXT NOT NULL, created_at TEXT NOT NULL)`,
+      `CREATE INDEX idx_rail_reservations_user ON rail_reservations(user_id,created_at)`,
+      `CREATE TABLE rail_ticket_details (ticket_id TEXT PRIMARY KEY REFERENCES tickets(id), reservation_id TEXT NOT NULL REFERENCES rail_reservations(id), inventory_id TEXT NOT NULL REFERENCES rail_inventory(id), details TEXT NOT NULL)`,
+      `CREATE TABLE rail_seats (inventory_id TEXT NOT NULL REFERENCES rail_inventory(id), seat_number INTEGER NOT NULL CHECK(seat_number > 0), ticket_id TEXT NOT NULL UNIQUE REFERENCES tickets(id), PRIMARY KEY(inventory_id,seat_number))`,
+    ],
+  },
+  {
+    version: 3,
+    statements: [
+      `CREATE INDEX IF NOT EXISTS idx_rail_ticket_details_reservation ON rail_ticket_details(reservation_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_users_role_created ON users(role,created_at,id)`,
+    ],
+  },
 ];
 
 async function migrate(db: Database) {

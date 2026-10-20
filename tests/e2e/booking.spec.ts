@@ -11,10 +11,11 @@ test("browse, book, verify, check in once, and reject replay", async ({
     page.getByRole("button", { name: /Neon Nights.*from/ }),
   ).toBeVisible();
   await page.getByRole("button", { name: "Railways", exact: true }).click();
-  await expect(page.locator(".event-card")).toHaveCount(2);
-  await page
-    .getByRole("button", { name: "All experiences", exact: true })
-    .click();
+  await expect(page).toHaveURL(/#rail$/);
+  await expect(
+    page.getByRole("button", { name: "Search trains", exact: true }),
+  ).toBeVisible();
+  await page.goto("/#explore");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await page
     .getByRole("button", { name: "Demo explorer", exact: true })

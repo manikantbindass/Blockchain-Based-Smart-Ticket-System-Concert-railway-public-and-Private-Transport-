@@ -39,6 +39,13 @@ export async function ticketFrom(
     String(row.event_id),
   ]);
   if (!event) throw new Error("Ticket event missing");
+  const rail =
+    event.category === "rail"
+      ? await db.get(
+          "SELECT details FROM rail_ticket_details WHERE ticket_id = ?",
+          [String(row.id)],
+        )
+      : undefined;
   return {
     id: String(row.id),
     eventId: String(row.event_id),
@@ -52,5 +59,8 @@ export async function ticketFrom(
     commitment: String(row.commitment),
     chainStatus: row.chain_status as Ticket["chainStatus"],
     transactionHash: row.transaction_hash ? String(row.transaction_hash) : null,
+    ...(rail
+      ? { rail: JSON.parse(String(rail.details)) as Ticket["rail"] }
+      : {}),
   };
 }

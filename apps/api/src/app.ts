@@ -19,6 +19,7 @@ import {
 } from "./security.js";
 import { eventFrom, ticketFrom, userFrom } from "./models.js";
 import { seedDemo } from "./seed.js";
+import { registerRailRoutes } from "./rail.js";
 
 class HttpError extends Error {
   constructor(
@@ -242,7 +243,10 @@ export async function buildApp(
         city: z.string().trim().max(80).optional(),
       })
       .parse(request.query);
-    const where = ["ends_at > ?"];
+    const where = [
+      "ends_at > ?",
+      "id NOT IN (SELECT event_id FROM rail_inventory)",
+    ];
     const values: (string | number)[] = [new Date().toISOString()];
     if (query.category) {
       where.push("category = ?");
@@ -397,6 +401,12 @@ export async function buildApp(
         ]);
         if (!event)
           return fail(404, "NOT_FOUND", "This experience could not be found.");
+        if (event.category === "rail")
+          return fail(
+            409,
+            "RAIL_FLOW_REQUIRED",
+            "Use the railway booking flow to select a train, passengers, and sandbox identity verification.",
+          );
         if (String(event.starts_at) <= now || String(event.ends_at) <= now)
           return fail(
             409,
@@ -505,6 +515,17 @@ export async function buildApp(
         "UPDATE events SET remaining = remaining + 1 WHERE id = ? AND remaining < capacity",
         [String(row.event_id)],
       );
+      const allocation = await tx.get(
+        "SELECT inventory_id FROM rail_seats WHERE ticket_id = ?",
+        [id],
+      );
+      if (allocation) {
+        await tx.run(
+          "UPDATE rail_inventory SET remaining = remaining + 1 WHERE id = ? AND remaining < capacity",
+          [String(allocation.inventory_id)],
+        );
+        await tx.run("DELETE FROM rail_seats WHERE ticket_id = ?", [id]);
+      }
       return {
         ticket: await ticketFrom(
           { ...row, status: "cancelled" },
@@ -517,7 +538,7 @@ export async function buildApp(
   app.get("/api/verify/:code", async (request) => {
     const code = getParam(request, "code");
     const row = await db.get(
-      "SELECT t.status,t.commitment,t.chain_status,t.transaction_hash,e.title,e.ends_at FROM tickets t JOIN events e ON e.id = t.event_id WHERE t.code = ?",
+      "SELECT t.status,t.commitment,t.chain_status,t.transaction_hash,e.title,e.ends_at,e.category FROM tickets t JOIN events e ON e.id = t.event_id WHERE t.code = ?",
       [code],
     );
     if (!row)
@@ -534,6 +555,7 @@ export async function buildApp(
       commitment: row.commitment,
       chainStatus: row.chain_status,
       transactionHash: row.transaction_hash || null,
+      ...(row.category === "rail" ? { sandboxRail: true } : {}),
     };
   });
   app.get("/api/organizer/dashboard", async (request) => {
@@ -640,6 +662,8 @@ export async function buildApp(
       };
     });
   });
+
+  registerRailRoutes(app, db, config, authenticate, fail);
 
   if (existsSync(config.webDist)) {
     await app.register(fastifyStatic, { root: config.webDist, prefix: "/" });

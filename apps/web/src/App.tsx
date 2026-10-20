@@ -47,13 +47,16 @@ import type {
   Dashboard,
   Event as Experience,
   Session,
+  RailBooking,
   SystemStatus,
   Ticket,
 } from "@chainpass/shared";
 import { api, ApiError, errorMessage, readSession, saveSession } from "./api";
 import { ErrorNotice, Modal, Spinner, Toast } from "./components";
+import RailPage from "./RailPage";
+import { RailReceipt } from "./RailReceipt";
 
-type Page = "explore" | "tickets" | "verify" | "organizer";
+type Page = "explore" | "rail" | "tickets" | "verify" | "organizer";
 const categories: {
   id: Category | "all";
   name: string;
@@ -88,6 +91,7 @@ const imageFor = (event: Experience) =>
   `/images/${{ concert: "concert", rail: "train", bus: "bus", metro: "metro" }[event.category]}.jpg`;
 const nav = [
   { id: "explore" as Page, label: "Explore", icon: Compass },
+  { id: "rail" as Page, label: "Rail bookings", icon: TrainFront },
   { id: "tickets" as Page, label: "My tickets", icon: TicketIcon },
   { id: "verify" as Page, label: "Verify ticket", icon: ScanLine },
   { id: "organizer" as Page, label: "Organizer", icon: LayoutDashboard },
@@ -101,6 +105,7 @@ function pageFromHash(): Page {
 export default function App() {
   const [page, setPage] = useState<Page>(pageFromHash);
   const [session, setSession] = useState<Session | null>(readSession);
+  const sessionRef = useRef(session);
   const [status, setStatus] = useState<SystemStatus | null>(null);
   const [events, setEvents] = useState<Experience[]>([]);
   const [loading, setLoading] = useState(true);
@@ -114,6 +119,7 @@ export default function App() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [ticketRevision, setTicketRevision] = useState(0);
+  const [railRoute, setRailRoute] = useState({ from: "SBC", to: "MAS" });
   const closeToast = useCallback(() => setToast(""), []);
   const navigate = useCallback((target: Page) => {
     location.hash = target;
@@ -122,6 +128,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
   const updateSession = useCallback((next: Session | null) => {
+    sessionRef.current = next;
     saveSession(next);
     setSession(next);
   }, []);
@@ -153,15 +160,31 @@ export default function App() {
   }, []);
   useEffect(() => {
     const saved = readSession();
+    const controller = new AbortController();
     if (saved)
-      void api<{ user: Session["user"] }>("/auth/me", { token: saved.token })
-        .then(({ user }) => updateSession({ token: saved.token, user }))
+      void api<{ user: Session["user"] }>("/auth/me", {
+        token: saved.token,
+        signal: controller.signal,
+      })
+        .then(({ user }) => {
+          if (
+            !controller.signal.aborted &&
+            sessionRef.current?.token === saved.token
+          )
+            updateSession({ token: saved.token, user });
+        })
         .catch((err) => {
-          if (err instanceof ApiError && err.status === 401) {
+          if (
+            !controller.signal.aborted &&
+            sessionRef.current?.token === saved.token &&
+            err instanceof ApiError &&
+            err.status === 401
+          ) {
             updateSession(null);
             setToast("Your session expired. Sign in to continue.");
           }
         });
+    return () => controller.abort();
   }, [updateSession]);
   const cities = useMemo(
     () => [...new Set(events.map((item) => item.city))].sort(),
@@ -444,7 +467,12 @@ export default function App() {
                         key={item.id}
                         className={`category-tab ${category === item.id ? "selected" : ""}`}
                         aria-pressed={category === item.id}
-                        onClick={() => setCategory(item.id)}
+                        onClick={() => {
+                          if (item.id === "rail") {
+                            setRailRoute({ from: "SBC", to: "MAS" });
+                            navigate("rail");
+                          } else setCategory(item.id);
+                        }}
                       >
                         <item.icon size={16} />
                         {item.name}
@@ -491,7 +519,16 @@ export default function App() {
                       <EventCard
                         key={event.id}
                         event={event}
-                        onSelect={() => setSelected(event)}
+                        onSelect={() => {
+                          if (event.category === "rail") {
+                            setRailRoute(
+                              event.id === "evt-western-line"
+                                ? { from: "CSMT", to: "MAO" }
+                                : { from: "SBC", to: "MAS" },
+                            );
+                            navigate("rail");
+                          } else setSelected(event);
+                        }}
                       />
                     ))}
                   </div>
@@ -527,8 +564,21 @@ export default function App() {
               </div>
             </>
           )}
+          {page === "rail" && (
+            <RailPage
+              key={session?.user.id || "guest"}
+              session={session}
+              initialRoute={railRoute}
+              onSignIn={() => setAuthOpen(true)}
+              onBooked={() => {
+                setTicketRevision((value) => value + 1);
+                void loadEvents();
+              }}
+            />
+          )}
           {page === "tickets" && (
             <TicketsPage
+              key={session?.user.id || "guest"}
               session={session}
               revision={ticketRevision}
               onSignIn={() => setAuthOpen(true)}
@@ -655,18 +705,24 @@ function EventCard({
     <button
       className="event-card"
       onClick={onSelect}
-      aria-label={`${event.title}, ${event.city}, from ${money(event.price)}`}
+      aria-label={
+        event.category === "rail"
+          ? `${event.title}, ${event.city}, search demo trains`
+          : `${event.title}, ${event.city}, from ${money(event.price)}`
+      }
     >
       <div className="event-image">
         <img src={imageFor(event)} alt="" loading="lazy" />
         <span className="event-category">{categoryName(event.category)}</span>
-        <div className="date-badge">
-          <span>
-            {formatDate(event.startsAt, { month: "short" }).toUpperCase()}
-          </span>
-          <strong>{formatDate(event.startsAt, { day: "2-digit" })}</strong>
-        </div>
-        {event.remaining === 0 && (
+        {event.category !== "rail" && (
+          <div className="date-badge">
+            <span>
+              {formatDate(event.startsAt, { month: "short" }).toUpperCase()}
+            </span>
+            <strong>{formatDate(event.startsAt, { day: "2-digit" })}</strong>
+          </div>
+        )}
+        {event.category !== "rail" && event.remaining === 0 && (
           <span className="sold-out-overlay">Sold out</span>
         )}
       </div>
@@ -679,8 +735,12 @@ function EventCard({
         <p className="event-subtitle">{event.subtitle}</p>
         <div className="event-card-bottom">
           <span>
-            <strong>{money(event.price)}</strong>
-            <small> / person</small>
+            <strong>
+              {event.category === "rail" ? "Search trains" : money(event.price)}
+            </strong>
+            <small>
+              {event.category === "rail" ? " / sandbox" : " / person"}
+            </small>
           </span>
           <span className="card-arrow">
             <ArrowUpRight size={18} />
@@ -1201,7 +1261,9 @@ function TicketsPage({
                     <img src={imageFor(ticket.event)} alt="" />
                     <span className={`ticket-status ${ticket.status}`}>
                       {ticket.status === "valid"
-                        ? "Ready to go"
+                        ? ticket.rail
+                          ? "Demo reservation"
+                          : "Ready to go"
                         : ticket.status === "used"
                           ? "Checked in"
                           : "Cancelled"}
@@ -1223,6 +1285,13 @@ function TicketsPage({
                       <MapPin size={14} />
                       {ticket.event.venue}
                     </div>
+                    {ticket.rail && (
+                      <div className="wallet-meta">
+                        <TrainFront size={14} />
+                        {ticket.rail.passenger.name} · {ticket.rail.coach} /{" "}
+                        {ticket.rail.seat}
+                      </div>
+                    )}
                   </div>
                   <div className="ticket-tear">
                     <span>{ticket.code}</span>
@@ -1271,7 +1340,9 @@ function TicketModal({
   const [qr, setQr] = useState(""),
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false),
-    [confirmCancel, setConfirmCancel] = useState(false);
+    [confirmCancel, setConfirmCancel] = useState(false),
+    [receiptOpen, setReceiptOpen] = useState(false),
+    [reservation, setReservation] = useState<RailBooking | null>(null);
   useEffect(() => {
     let active = true;
     void QRCode.toDataURL(ticket.qrPayload, {
@@ -1337,7 +1408,9 @@ function TicketModal({
     );
     ctx.font = "17px Arial";
     ctx.fillText(
-      "Keep this ticket private. QR admits one person, once.",
+      ticket.rail
+        ? "SANDBOX ONLY — NOT VALID FOR TRAVEL"
+        : "Keep this ticket private. QR admits one person, once.",
       450,
       1120,
     );
@@ -1374,6 +1447,40 @@ function TicketModal({
       );
     }
   }
+  async function showReceipt() {
+    if (!ticket.rail) return;
+    setBusy(true);
+    setError("");
+    try {
+      setReservation(
+        await api<RailBooking>(
+          `/rail/bookings/${encodeURIComponent(ticket.rail.reservationId)}`,
+          { token: session.token },
+        ),
+      );
+      setReceiptOpen(true);
+    } catch (err) {
+      setError(errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+  if (receiptOpen && ticket.rail && reservation) {
+    return (
+      <Modal
+        title="Rail reservation slip"
+        wide
+        onClose={() => setReceiptOpen(false)}
+      >
+        <RailReceipt
+          tickets={reservation.tickets}
+          pnr={reservation.pnr}
+          total={reservation.total}
+          onClose={() => setReceiptOpen(false)}
+        />
+      </Modal>
+    );
+  }
   return (
     <Modal
       title="Your ticket"
@@ -1385,12 +1492,16 @@ function TicketModal({
         <div className="ticket-dialog-heading">
           <span className={`ticket-status ${ticket.status}`}>
             {ticket.status === "valid"
-              ? "Ready to go"
+              ? ticket.rail
+                ? "Demo reservation"
+                : "Ready to go"
               : ticket.status === "used"
                 ? "Checked in"
                 : "Cancelled"}
           </span>
-          <span className="eyebrow muted">ADMIT ONE</span>
+          <span className="eyebrow muted">
+            {ticket.rail ? "SANDBOX RAIL" : "ADMIT ONE"}
+          </span>
         </div>
         <h2>{ticket.event.title}</h2>
         <p className="dialog-description">
@@ -1428,10 +1539,19 @@ function TicketModal({
           </button>
         </div>
         <p className="fine-print centered">
-          Your QR is your entry pass. Keep it private.
-          <br />
-          The organizer scans it when you arrive.
+          {ticket.rail
+            ? "Simulated railway reservation. Not valid for travel."
+            : "Your QR is your entry pass. Keep it private. The organizer scans it when you arrive."}
         </p>
+        {ticket.rail && (
+          <button
+            className="button secondary full-width"
+            disabled={busy}
+            onClick={() => void showReceipt()}
+          >
+            <TrainFront size={17} /> View reservation slip
+          </button>
+        )}
         <div className="chain-state">
           <ShieldCheck size={18} />
           <div>
@@ -1529,6 +1649,7 @@ type Verification = {
   commitment: string;
   chainStatus: string;
   transactionHash: string | null;
+  sandboxRail?: boolean;
 };
 function VerifyPage() {
   const [code, setCode] = useState(() => {
@@ -1621,14 +1742,18 @@ function VerifyPage() {
               <div>
                 <h3>
                   {result.valid
-                    ? "This ticket is valid"
+                    ? result.sandboxRail
+                      ? "Valid sandbox reservation"
+                      : "This ticket is valid"
                     : `Ticket ${result.status}`}
                 </h3>
                 <p>{result.eventTitle}</p>
                 <span>
-                  {result.valid
-                    ? "Ticket is currently eligible for check-in."
-                    : "This ticket cannot be used for entry."}
+                  {result.sandboxRail
+                    ? "Simulated railway ticket. Not valid for travel."
+                    : result.valid
+                      ? "Ticket is currently eligible for check-in."
+                      : "This ticket cannot be used for entry."}
                 </span>
               </div>
               <div className="verification-proof">

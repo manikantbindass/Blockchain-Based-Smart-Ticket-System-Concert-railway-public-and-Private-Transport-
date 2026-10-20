@@ -12,6 +12,7 @@ Please report vulnerabilities privately to the repository owner through GitHub's
 - Request identifiers, structured logs, security headers, and request rate limits.
 - No PII or admission credential written to the blockchain.
 - Local environment files, databases, private keys, and deployment artifacts excluded from version control.
+- Railway verification accepts only fixed invalid test identifiers, hashes short-lived OTP challenges, enforces attempt/cooldown limits and account ownership, and records sandbox consent. Railway booking and verification fail closed in production.
 
 ## Operational requirements
 
@@ -22,3 +23,5 @@ QR credentials are bearer admission credentials. Anyone who photographs one can 
 Rotating the QR secret invalidates existing QR credentials. A production migration should use versioned signing keys and a defined overlap window; this starter does not implement automatic key rotation. Browser sessions use session storage and remain vulnerable to XSS; keep dependencies current and avoid third-party scripts.
 
 Rate limiting is process-local. Multi-replica deployments need a shared edge limiter. Smart contracts have automated local-EVM tests but have not received an independent audit. Sandbox checkout does not process payment or refunds. Ticket cancellation releases local inventory only.
+
+The railway OTP is deliberately displayed by the simulator and is not a real authentication factor. Do not submit real Aadhaar/VID numbers or treat sandbox identity status as verified identity. Passenger names and receipt contact fields are application data; use fictitious values for demonstrations. No Aadhaar, passenger information, or OTP is placed on-chain. Approved provider integrations and reviewed data-retention controls are required before handling real railway reservations or identity verification.

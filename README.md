@@ -35,6 +35,7 @@ The login dialog also includes demo sign-in buttons. These identities are create
 - Browse and search experiences by category and city, with responsive event details and live availability.
 - Register, sign in, restore a session, and sign out; passwords are salted and hashed and session tokens are stored hashed on the server.
 - Book sandbox tickets with transactional inventory checks and idempotency keys, preventing overselling and duplicate issuance on retries.
+- Book railway journeys through train/class search, passenger entry, Aadhaar-style **test identity** verification, review, simulated payment, seat allocation, and a printable reservation slip. See the [railway walkthrough](docs/RAILWAY-BOOKING.md).
 - View personal tickets, display signed QR credentials, inspect issuance proofs, and cancel eligible tickets.
 - Verify a ticket code without exposing the customer or the signed admission credential.
 - Operate an organizer dashboard, create listings, and check tickets in exactly once, with ownership checks.
@@ -104,6 +105,7 @@ Dockerfile             Reproducible Node 24 build
 ## Documentation
 
 - [API contract](docs/API-CONTRACT.md)
+- [Railway booking sandbox and its limits](docs/RAILWAY-BOOKING.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Architecture and data consistency](docs/ARCHITECTURE.md)
 - [Deployment and operations](docs/DEPLOYMENT.md)

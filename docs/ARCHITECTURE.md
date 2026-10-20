@@ -20,6 +20,14 @@ Concurrent requests cannot spend the same remaining inventory. A repeated key wi
 
 Cancellation conditionally transitions an owned valid ticket and restores inventory once. Check-in conditionally consumes a valid ticket once, after verifying both the signed credential and organizer ownership. Competing cancellations and admissions serialize on the same durable state; only one transition succeeds.
 
+## Railway domain
+
+Railway booking uses a separate API flow with account identity simulation, a fixed timetable, and inventory partitioned by train, journey date, class, and quota. The selected journey is represented by an internal event so ticket signing, ownership, cancellation, and the outbox keep the same infrastructure. One reservation groups individual passenger tickets. Seat allocation is durable and occurs in the booking transaction; a class selection in the browser does not reserve inventory.
+
+The railway schema is introduced by an additive versioned migration. Existing tickets and local accounts remain intact. A cancellation removes the active seat allocation while retaining the original passenger ticket and reservation metadata for the receipt. A later reservation may reuse the released seat; the cancelled QR remains invalid.
+
+Identity challenges belong to the account and store a hash of the simulated OTP, its deadline, attempts, and consent version. Account verification never implies that all passengers were authenticated. These endpoints are explicitly unavailable in production. A real provider integration must replace the simulator's trust boundary and fulfill the operational requirements in the [railway guide](RAILWAY-BOOKING.md).
+
 ## Blockchain boundary
 
 The chain stores only opaque 32-byte commitments and issuance metadata. The QR credential and customer identity never leave the application boundary. A receipt is evidence of issuance, not evidence of current admission eligibility. Cancellation and used status are deliberately checked online against the database.
