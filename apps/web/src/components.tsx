@@ -12,15 +12,19 @@ export function Modal({
   children,
   onClose,
   wide = false,
+  externalDialog = false,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
+  externalDialog?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  const externalRef = useRef(externalDialog);
+  externalRef.current = externalDialog;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     const oldOverflow = document.body.style.overflow;
@@ -34,6 +38,7 @@ export function Modal({
       ).filter((el) => el.offsetParent !== null);
     (focusable()[0] || node).focus();
     const handleKey = (event: KeyboardEvent) => {
+      if (externalRef.current) return;
       if (event.key === "Escape") closeRef.current();
       if (event.key === "Tab") {
         const elements = focusable();

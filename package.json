@@ -26,7 +26,9 @@
     "organizer:create": "npm run organizer:create -w @chainpass/api"
   },
   "overrides": {
-    "tmp": "0.2.7"
+    "tmp": "0.2.7",
+    "@grpc/grpc-js": "1.14.6",
+    "rollup": "4.64.10"
   },
   "devDependencies": {
     "concurrently": "^9.2.1",

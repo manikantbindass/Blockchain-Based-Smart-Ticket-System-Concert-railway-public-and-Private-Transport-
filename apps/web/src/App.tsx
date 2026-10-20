@@ -55,6 +55,9 @@ import { api, ApiError, errorMessage, readSession, saveSession } from "./api";
 import { ErrorNotice, Modal, Spinner, Toast } from "./components";
 import RailPage from "./RailPage";
 import { RailReceipt } from "./RailReceipt";
+import { ProviderAuth } from "./ProviderAuth";
+import { PaymentCheckout } from "./PaymentCheckout";
+import { PaymentHistory } from "./PaymentHistory";
 
 type Page = "explore" | "rail" | "tickets" | "verify" | "organizer";
 const categories: {
@@ -348,6 +351,14 @@ export default function App() {
                   <span>{session.user.name.split(" ")[0]}</span>
                 </button>
                 <button
+                  className="icon-button"
+                  onClick={() => setAuthOpen(true)}
+                  title="Manage sign-in methods"
+                  aria-label="Manage sign-in methods"
+                >
+                  <Fingerprint size={18} />
+                </button>
+                <button
                   className="icon-button logout"
                   onClick={() => void signOut()}
                   title="Sign out"
@@ -619,13 +630,17 @@ export default function App() {
         <AuthModal
           onClose={() => setAuthOpen(false)}
           onSuccess={(next) => {
+            const linking = !!session;
             updateSession(next);
             setAuthOpen(false);
             setToast(
-              `Welcome ${next.user.name.split(" ")[0]}. You’re all set.`,
+              linking
+                ? "Your sign-in method is connected."
+                : `Welcome ${next.user.name.split(" ")[0]}. You’re all set.`,
             );
           }}
           demo={status?.mode === "demo"}
+          session={session}
         />
       )}
       {helpOpen && (
@@ -785,10 +800,12 @@ function AuthModal({
   onClose,
   onSuccess,
   demo,
+  session,
 }: {
   onClose: () => void;
   onSuccess: (session: Session) => void;
   demo: boolean;
+  session: Session | null;
 }) {
   const [register, setRegister] = useState(false),
     [name, setName] = useState(""),
@@ -796,6 +813,15 @@ function AuthModal({
     [password, setPassword] = useState(""),
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [providerBusy, setProviderBusy] = useState(false);
+  const [externalDialog, setExternalDialog] = useState(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   async function submit(
     event?: FormEvent,
     identity?: "explorer" | "organizer",
@@ -810,23 +836,29 @@ function AuthModal({
             password: identity === "explorer" ? "Explore123!" : "Organize123!",
           }
         : { email, password, ...(register ? { name } : {}) };
-      onSuccess(
-        await api<Session>(
-          `/auth/${register && !identity ? "register" : "login"}`,
-          { method: "POST", body },
-        ),
+      const next = await api<Session>(
+        `/auth/${register && !identity ? "register" : "login"}`,
+        { method: "POST", body },
       );
+      if (mounted.current) onSuccess(next);
     } catch (err) {
-      setError(errorMessage(err));
+      if (mounted.current) setError(errorMessage(err));
     } finally {
-      setBusy(false);
+      if (mounted.current) setBusy(false);
     }
   }
   return (
     <Modal
-      title={register ? "Create account" : "Welcome back"}
+      title={
+        session
+          ? "Manage sign-in methods"
+          : register
+            ? "Create account"
+            : "Welcome back"
+      }
+      externalDialog={externalDialog}
       onClose={() => {
-        if (!busy) onClose();
+        if (!busy && !providerBusy) onClose();
       }}
     >
       <div className="dialog-body">
@@ -834,104 +866,139 @@ function AuthModal({
           <TicketIcon size={27} />
         </span>
         <h2>
-          {register ? "Your next story starts here." : "Good to see you again."}
+          {session
+            ? "Another way to get here."
+            : register
+              ? "Your next story starts here."
+              : "Good to see you again."}
         </h2>
         <p className="dialog-description">
-          {register
-            ? "One account. Every experience. Create your free ChainPass account."
-            : "Sign in to book your next experience and access your tickets."}
+          {session
+            ? "Connect an email/password account to a verified Google account or mobile number."
+            : register
+              ? "One account. Every experience. Create your free ChainPass account."
+              : "Sign in to book your next experience and access your tickets."}
         </p>
-        <form className="form-stack" onSubmit={submit}>
-          {register && (
-            <label>
-              Full name
-              <input
-                required
-                minLength={2}
-                maxLength={80}
-                autoComplete="name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Your name"
-              />
-            </label>
-          )}
-          <label>
-            Email address
-            <input
-              type="email"
-              required
-              autoComplete="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@example.com"
-            />
-          </label>
-          <label>
-            Password
-            <input
-              type="password"
-              required
-              minLength={10}
-              maxLength={128}
-              autoComplete={register ? "new-password" : "current-password"}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder={
-                register ? "At least 10 characters" : "Your password"
-              }
-            />
-          </label>
-          {error && <ErrorNotice message={error} />}
-          <button className="button primary full-width" disabled={busy}>
-            {busy ? (
-              <Spinner label="One moment…" />
-            ) : (
-              <>
-                {register ? "Create account" : "Sign in"}
-                <ArrowRight size={18} />
-              </>
-            )}
-          </button>
-        </form>
-        <p className="auth-switch">
-          {register ? "Already part of the crowd?" : "New around here?"}{" "}
-          <button
-            disabled={busy}
-            onClick={() => {
-              setRegister(!register);
-              setError("");
-            }}
-          >
-            {register ? "Sign in" : "Create an account"}
-          </button>
-        </p>
-        {demo && (
-          <div className="demo-signin">
-            <div className="divider-label">TAKE IT FOR A SPIN</div>
-            <div>
-              <button
-                className="button secondary"
-                disabled={busy}
-                onClick={() => void submit(undefined, "explorer")}
-              >
-                <Compass size={16} />
-                Demo explorer
-              </button>
-              <button
-                className="button secondary"
-                disabled={busy}
-                onClick={() => void submit(undefined, "organizer")}
-              >
-                <LayoutDashboard size={16} />
-                Demo organizer
-              </button>
-            </div>
-            <p>
-              Demo accounts reset with the local database. No payment details
-              needed.
-            </p>
+        {session && (
+          <div className="account-methods-summary">
+            <ShieldCheck size={17} />
+            <span>
+              {session.user.email || session.user.phone || session.user.name}
+            </span>
           </div>
+        )}
+        <ProviderAuth
+          session={session}
+          disabled={busy}
+          onSuccess={onSuccess}
+          onBusyChange={setProviderBusy}
+          onExternalDialogChange={setExternalDialog}
+        />
+        {!session && (
+          <>
+            <div className="divider-label">OR CONTINUE WITH EMAIL</div>
+            <form
+              className="form-stack"
+              onSubmit={(event) => {
+                if (providerBusy) event.preventDefault();
+                else void submit(event);
+              }}
+            >
+              {register && (
+                <label>
+                  Full name
+                  <input
+                    required
+                    minLength={2}
+                    maxLength={80}
+                    autoComplete="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Your name"
+                  />
+                </label>
+              )}
+              <label>
+                Email address
+                <input
+                  type="email"
+                  required
+                  autoComplete="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@example.com"
+                />
+              </label>
+              <label>
+                Password
+                <input
+                  type="password"
+                  required
+                  minLength={10}
+                  maxLength={128}
+                  autoComplete={register ? "new-password" : "current-password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={
+                    register ? "At least 10 characters" : "Your password"
+                  }
+                />
+              </label>
+              {error && <ErrorNotice message={error} />}
+              <button
+                className="button primary full-width"
+                disabled={busy || providerBusy}
+              >
+                {busy ? (
+                  <Spinner label="One moment…" />
+                ) : (
+                  <>
+                    {register ? "Create account" : "Sign in"}
+                    <ArrowRight size={18} />
+                  </>
+                )}
+              </button>
+            </form>
+            <p className="auth-switch">
+              {register ? "Already part of the crowd?" : "New around here?"}{" "}
+              <button
+                disabled={busy || providerBusy}
+                onClick={() => {
+                  setRegister(!register);
+                  setError("");
+                }}
+              >
+                {register ? "Sign in" : "Create an account"}
+              </button>
+            </p>
+            {demo && (
+              <div className="demo-signin">
+                <div className="divider-label">TAKE IT FOR A SPIN</div>
+                <div>
+                  <button
+                    className="button secondary"
+                    disabled={busy || providerBusy}
+                    onClick={() => void submit(undefined, "explorer")}
+                  >
+                    <Compass size={16} />
+                    Demo explorer
+                  </button>
+                  <button
+                    className="button secondary"
+                    disabled={busy || providerBusy}
+                    onClick={() => void submit(undefined, "organizer")}
+                  >
+                    <LayoutDashboard size={16} />
+                    Demo organizer
+                  </button>
+                </div>
+                <p>
+                  Demo accounts reset with the local database. No payment
+                  details needed.
+                </p>
+              </div>
+            )}
+          </>
         )}
       </div>
     </Modal>
@@ -953,38 +1020,19 @@ function BookingModal({
   onSignIn: () => void;
   onBooked: () => void;
 }) {
-  const [quantity, setQuantity] = useState(1),
-    [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
-  const intent = useRef({ signature: "", key: "" });
-  async function book() {
-    if (!session) {
-      onSignIn();
-      return;
-    }
-    const signature = `${session.user.id}:${event.id}:${quantity}`;
-    if (intent.current.signature !== signature)
-      intent.current = { signature, key: crypto.randomUUID() };
-    setBusy(true);
-    setError("");
-    try {
-      await api<Booking>("/bookings", {
-        method: "POST",
-        token: session.token,
-        idempotencyKey: intent.current.key,
-        body: { eventId: event.id, quantity },
-      });
-      onBooked();
-    } catch (err) {
-      setError(errorMessage(err));
-    } finally {
-      setBusy(false);
-    }
-  }
+  const [quantity, setQuantity] = useState(1);
+  const [busy, setBusy] = useState(false);
+  const [quantityHeld, setQuantityHeld] = useState(false);
+  const [externalDialog, setExternalDialog] = useState(false);
+  const holdQuantity = useCallback((held: number | null) => {
+    setQuantityHeld(held !== null);
+    if (held !== null) setQuantity(held);
+  }, []);
   return (
     <Modal
       title="Your next experience"
       wide
+      externalDialog={externalDialog}
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -1047,7 +1095,7 @@ function BookingModal({
               aria-labelledby="quantity-label"
             >
               <button
-                disabled={quantity <= 1 || busy}
+                disabled={quantity <= 1 || busy || quantityHeld}
                 aria-label="Remove one ticket"
                 onClick={() => setQuantity((value) => value - 1)}
               >
@@ -1055,7 +1103,11 @@ function BookingModal({
               </button>
               <output aria-live="polite">{quantity}</output>
               <button
-                disabled={quantity >= Math.min(6, event.remaining) || busy}
+                disabled={
+                  quantity >= Math.min(6, event.remaining) ||
+                  busy ||
+                  quantityHeld
+                }
                 aria-label="Add one ticket"
                 onClick={() => setQuantity((value) => value + 1)}
               >
@@ -1080,49 +1132,21 @@ function BookingModal({
             <span>Total</span>
             <strong>{money(event.price * quantity)}</strong>
           </div>
-          {systemStatus?.mode === "demo" && (
-            <div className="demo-disclosure">
-              <CreditCard size={17} />
-              <span>
-                <strong>Demo checkout</strong>No payment is collected. Your demo
-                ticket is issued instantly.
-              </span>
-            </div>
-          )}
-          {!systemStatus && (
-            <p className="fine-print">
-              Checkout availability is confirmed by the server.
-            </p>
-          )}
-          {error && <ErrorNotice message={error} />}
-          <button
-            className="button primary full-width"
-            disabled={
-              busy ||
-              event.remaining === 0 ||
-              new Date(event.startsAt).getTime() <= Date.now()
-            }
-            onClick={() => void book()}
-          >
-            {busy ? (
-              <Spinner label="Securing your tickets…" />
-            ) : (
-              <>
-                {event.remaining === 0
-                  ? "Sold out"
-                  : new Date(event.startsAt).getTime() <= Date.now()
-                    ? "Booking closed"
-                    : session
-                      ? "Confirm booking"
-                      : "Sign in to book"}
-                <ArrowRight size={17} />
-              </>
-            )}
-          </button>
-          <p className="fine-print centered">
-            Tickets appear in your wallet after booking. You can cancel an
-            unused ticket before the experience begins.
-          </p>
+          <PaymentCheckout
+            key={`${session?.token ?? "guest"}:${event.id}`}
+            eventId={event.id}
+            title={event.title}
+            quantity={quantity}
+            session={session}
+            demo={systemStatus?.mode === "demo"}
+            soldOut={event.remaining === 0}
+            bookingClosed={new Date(event.startsAt).getTime() <= Date.now()}
+            onSignIn={onSignIn}
+            onBooked={onBooked}
+            onBusyChange={setBusy}
+            onExternalDialogChange={setExternalDialog}
+            onQuantityHeld={holdQuantity}
+          />
         </div>
       </div>
     </Modal>
@@ -1228,6 +1252,7 @@ function TicketsPage({
               Refresh <ArrowUpRight size={14} />
             </button>
           </div>
+          <PaymentHistory session={session} onIssued={() => void load()} />
           {error && <ErrorNotice message={error} onRetry={() => void load()} />}
           {loading ? (
             <div className="loading-panel">
@@ -1263,7 +1288,9 @@ function TicketsPage({
                       {ticket.status === "valid"
                         ? ticket.rail
                           ? "Demo reservation"
-                          : "Ready to go"
+                          : ticket.payment?.mode === "test"
+                            ? "Razorpay test ticket"
+                            : "Ready to go"
                         : ticket.status === "used"
                           ? "Checked in"
                           : "Cancelled"}
@@ -1410,7 +1437,9 @@ function TicketModal({
     ctx.fillText(
       ticket.rail
         ? "SANDBOX ONLY — NOT VALID FOR TRAVEL"
-        : "Keep this ticket private. QR admits one person, once.",
+        : ticket.payment?.mode === "test"
+          ? "RAZORPAY TEST PAYMENT — NO MONEY CHARGED"
+          : "Keep this ticket private. QR admits one person, once.",
       450,
       1120,
     );
@@ -1494,7 +1523,9 @@ function TicketModal({
             {ticket.status === "valid"
               ? ticket.rail
                 ? "Demo reservation"
-                : "Ready to go"
+                : ticket.payment?.mode === "test"
+                  ? "Razorpay test ticket"
+                  : "Ready to go"
               : ticket.status === "used"
                 ? "Checked in"
                 : "Cancelled"}
@@ -1504,6 +1535,21 @@ function TicketModal({
           </span>
         </div>
         <h2>{ticket.event.title}</h2>
+        {ticket.payment && (
+          <div className="payment-pending">
+            <strong>
+              {ticket.payment.mode === "test"
+                ? "Razorpay test payment"
+                : "Payment confirmed"}
+            </strong>
+            <p>
+              {ticket.payment.mode === "test"
+                ? "This ticket was issued using a simulated provider payment. No money was charged."
+                : "For cancellation or refund assistance, contact the organizer."}
+            </p>
+            <p className="payment-reference">Order: {ticket.payment.orderId}</p>
+          </div>
+        )}
         <p className="dialog-description">
           {eventDate(ticket.event.startsAt)} ·{" "}
           {eventTime(ticket.event.startsAt)} IST
@@ -1603,7 +1649,14 @@ function TicketModal({
           <ArrowDownToLine size={17} />
           Download ticket
         </button>
-        {ticket.status === "valid" &&
+        {ticket.payment && ticket.status === "valid" && (
+          <p className="fine-print centered">
+            Contact the organizer for cancellation and refund assistance. Online
+            cancellation is unavailable for provider-paid tickets.
+          </p>
+        )}
+        {!ticket.payment &&
+          ticket.status === "valid" &&
           new Date(ticket.event.startsAt).getTime() > Date.now() &&
           (confirmCancel ? (
             <div className="cancel-confirm">

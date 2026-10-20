@@ -21,7 +21,7 @@ Supply `POSTGRES_PASSWORD`, `DATABASE_URL`, `QR_SECRET`, and `WEB_ORIGIN` throug
 docker compose -f compose.yaml -f compose.production.yaml up --build -d
 ```
 
-The production override disables demo identities and checkout. A real payment integration must be completed before commercial ticket sales. To run an explicitly labelled private production sandbox, override `DEMO_MODE=true` deliberately; never represent that mode as paid processing.
+The production override disables demo identities and free checkout. Configure Firebase and Razorpay through the [provider setup guide](AUTH-AND-PAYMENTS.md) to enable their integrations. Live Razorpay keys are rejected while demo mode is enabled. Validate merchant capture, webhooks, reconciliation, and refund operations before commercial ticket sales.
 
 Use a fresh production database. Production refuses demo seeding, but it cannot erase demo identities already present in a reused database. Provision an organizer with `npm run organizer:create`: supply `ORGANIZER_NAME`, `ORGANIZER_EMAIL`, and `ORGANIZER_PASSWORD` (at least 12 characters) through your secret manager or local ignored environment file. The command does not print the password. In the production container, invoke `node apps/api/dist/create-organizer.js` with the same environment. Public registration always creates customers.
 
@@ -33,11 +33,12 @@ Expose the loopback application port only through a TLS reverse proxy. Configure
 - Take encrypted database backups, test restores into a separate environment, and use point-in-time recovery for deployed PostgreSQL.
 - Apply schema changes with a controlled rollout and preserve a compatible previous application version for rollback.
 - Monitor error rates, request latency, database connections/locks, capacity conflicts, authentication failures, pending proof jobs, worker failures, chain RPC errors, and signer balance.
+- Monitor payment orders that remain unresolved, signature failures, and `refund_required` cases. Reconcile captures with issued tickets and handle refunds through an accountable support process.
 - Keep a single anchoring worker per signer until nonce coordination is implemented. Restarting the worker must be safe because commitments are idempotent.
 - Use separate issuer and administrator identities on public chains; do not run the service with governance privileges.
 
 ## Capacity validation
 
-Establish representative traffic first: catalog reads, booking contention for the same event, QR check-in bursts, and intermittent chain failure. Measure p50/p95/p99 latency and error rates with realistic database size. Assert `issued + remaining = capacity` after competing bookings and cancellations. Introduce API and worker restarts during workloads and verify idempotent recovery.
+Establish representative traffic first: catalog reads, booking contention for the same event, payment webhook retries and delayed capture, QR check-in bursts, and intermittent chain failure. Measure p50/p95/p99 latency and error rates with realistic database size. Assert `active issued + active payment holds + remaining = capacity` after competing bookings and cancellations. Introduce API and worker restarts during workloads and verify idempotent recovery.
 
 Avoid throughput promises until these experiments pass on the target infrastructure. Test database restore and application rollback before a live event, not during it.

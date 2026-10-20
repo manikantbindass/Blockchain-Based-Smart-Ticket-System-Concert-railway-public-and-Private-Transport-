@@ -20,6 +20,14 @@ Concurrent requests cannot spend the same remaining inventory. A repeated key wi
 
 Cancellation conditionally transitions an owned valid ticket and restores inventory once. Check-in conditionally consumes a valid ticket once, after verifying both the signed credential and organizer ownership. Competing cancellations and admissions serialize on the same durable state; only one transition succeeds.
 
+## Provider boundaries
+
+Firebase verifies Google and phone sign-in. The API verifies Firebase ID tokens through the Admin SDK before mapping a UID to a local user and issuing its own opaque session. Explicit account linking requires reauthentication; an email match does not merge accounts. Firebase phone authentication is unrelated to the railway test identity.
+
+Razorpay checkout reserves inventory before contacting the provider. External requests are outside database transactions; a durable local order and receipt allow retry recovery. A capture can be received by a signed webhook, browser confirmation followed by provider verification, or reconciliation. Fulfillment serializes on the order, inserts tickets and outbox jobs once, and consumes the reservation in the same transaction.
+
+Expired holds release capacity. A late capture reacquires inventory if available; otherwise it produces a durable `refund_required` state and no ticket. Paid tickets cannot use the free cancellation path. Automated refunds are not implemented. See [provider setup and operational limits](AUTH-AND-PAYMENTS.md).
+
 ## Railway domain
 
 Railway booking uses a separate API flow with account identity simulation, a fixed timetable, and inventory partitioned by train, journey date, class, and quota. The selected journey is represented by an internal event so ticket signing, ownership, cancellation, and the outbox keep the same infrastructure. One reservation groups individual passenger tickets. Seat allocation is durable and occurs in the booking transaction; a class selection in the browser does not reserve inventory.
@@ -52,13 +60,13 @@ Do not run multiple uncoordinated workers sharing an EVM signer. Database job le
 
 ## Product work before paid production
 
-- Integrate a payment service with expiring inventory reservations, signed and idempotent webhooks, reconciliation, refunds, and failure recovery. Do not issue paid tickets based on browser success callbacks.
+- Validate Firebase/Razorpay configuration in the target accounts, establish refund/dispute and settlement operations, and exercise recovery under provider outages. Do not issue paid tickets based on browser success callbacks.
 - Add verified email delivery, password reset, account recovery, MFA for operators, and an authenticated organizer onboarding process.
 - Complete independent API and contract security review, dependency review, accessibility testing, and workload-specific load tests.
 - Define the real transport operator integration. Seeded rail/bus/metro listings are demo inventory, not live carrier inventory.
 - Establish data retention, deletion, support, accessibility, privacy, and regional commerce policies.
 
-These are explicit deployment requirements, not implemented integrations.
+These are deployment requirements beyond the implemented authentication and payment adapters.
 
 ## Current operational bounds
 

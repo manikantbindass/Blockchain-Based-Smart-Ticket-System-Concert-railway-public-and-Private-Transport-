@@ -12,3 +12,5 @@ data
 **/deployments/localhost.json
 test-results
 playwright-report
+**/*service-account*.json
+**/*-firebase-adminsdk-*.json

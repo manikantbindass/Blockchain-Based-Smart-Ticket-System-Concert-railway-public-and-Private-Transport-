@@ -160,6 +160,25 @@ const migrations = [
       `CREATE INDEX IF NOT EXISTS idx_users_role_created ON users(role,created_at,id)`,
     ],
   },
+  {
+    version: 4,
+    statements: [
+      `CREATE TABLE payment_orders (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), event_id TEXT NOT NULL REFERENCES events(id), quantity INTEGER NOT NULL CHECK(quantity BETWEEN 1 AND 6), amount INTEGER NOT NULL CHECK(amount > 0), currency TEXT NOT NULL DEFAULT 'INR', request_key TEXT NOT NULL, request_hash TEXT NOT NULL, provider_order_id TEXT UNIQUE, provider_payment_id TEXT UNIQUE, key_id TEXT NOT NULL, mode TEXT NOT NULL CHECK(mode IN ('test','live')), status TEXT NOT NULL CHECK(status IN ('creating','pending','paid','expired','refund_required')), hold_active INTEGER NOT NULL DEFAULT 1 CHECK(hold_active IN (0,1)), expires_at TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, review_reason TEXT, UNIQUE(user_id,request_key))`,
+      `CREATE INDEX idx_payment_orders_expiry ON payment_orders(hold_active,expires_at)`,
+      `CREATE INDEX idx_payment_orders_review ON payment_orders(status,updated_at)`,
+      `CREATE TABLE payment_tickets (ticket_id TEXT PRIMARY KEY REFERENCES tickets(id), order_id TEXT NOT NULL REFERENCES payment_orders(id))`,
+      `CREATE INDEX idx_payment_tickets_order ON payment_tickets(order_id)`,
+      `CREATE TABLE payment_webhooks (event_id TEXT PRIMARY KEY, payload_hash TEXT NOT NULL, processed_at TEXT NOT NULL)`,
+    ],
+  },
+  {
+    version: 5,
+    statements: [
+      `ALTER TABLE users ADD COLUMN phone TEXT`,
+      `ALTER TABLE users ADD COLUMN email_is_placeholder INTEGER NOT NULL DEFAULT 0`,
+      `CREATE TABLE auth_identities (firebase_uid TEXT PRIMARY KEY, user_id TEXT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE, provider TEXT NOT NULL CHECK(provider IN ('google.com','phone')), created_at TEXT NOT NULL)`,
+    ],
+  },
 ];
 
 async function migrate(db: Database) {

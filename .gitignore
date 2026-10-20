@@ -17,3 +17,6 @@ playwright-report/
 test-results/
 .DS_Store
 .local/
+# Defense in depth; keep provider credentials outside the repository.
+*service-account*.json
+*-firebase-adminsdk-*.json

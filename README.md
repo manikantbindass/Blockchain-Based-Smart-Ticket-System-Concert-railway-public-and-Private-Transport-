@@ -6,7 +6,7 @@ Built with React, TypeScript, Fastify, PostgreSQL / SQLite, and Solidity. Local 
 
 ![ChainPass desktop interface](docs/screenshots/desktop.png)
 
-> Checkout is a clearly labelled sandbox: it never charges money. Blockchain anchoring is optional and never simulated. The included contract is a commitment registry, not an NFT marketplace. Public payment processing, audited smart contracts, and production operations are deployment gates, not claims made by this repository.
+> The default local checkout is free. Optional **Firebase Google/phone sign-in** and **Razorpay UPI/card checkout** connect to your provider accounts when configured. Razorpay test mode moves no money; live mode requires explicit production configuration. Railway reservations and Aadhaar-style verification remain simulations. Blockchain anchoring is optional and never simulated.
 
 ## Start locally
 
@@ -34,6 +34,8 @@ The login dialog also includes demo sign-in buttons. These identities are create
 
 - Browse and search experiences by category and city, with responsive event details and live availability.
 - Register, sign in, restore a session, and sign out; passwords are salted and hashed and session tokens are stored hashed on the server.
+- Sign in with Google or a phone OTP through Firebase, with server token verification and explicit account linking.
+- Pay for catalog tickets through Razorpay's hosted checkout, with inventory holds, server-confirmed capture, signed webhooks, and recovery after an interrupted checkout.
 - Book sandbox tickets with transactional inventory checks and idempotency keys, preventing overselling and duplicate issuance on retries.
 - Book railway journeys through train/class search, passenger entry, Aadhaar-style **test identity** verification, review, simulated payment, seat allocation, and a printable reservation slip. See the [railway walkthrough](docs/RAILWAY-BOOKING.md).
 - View personal tickets, display signed QR credentials, inspect issuance proofs, and cancel eligible tickets.
@@ -71,6 +73,12 @@ The platform works normally with blockchain disabled and shows that state in the
 
 Only local test-chain deployments are provided. Development chain keys and accounts have no value and must never be funded on public networks. A transaction proves issuance; current cancellation and admission status remain authoritative in the application database. No personal data or QR secret is stored on-chain.
 
+## Connect authentication and payments
+
+Follow [Firebase and Razorpay setup](docs/AUTH-AND-PAYMENTS.md). Add your Firebase web configuration, server credentials, and Razorpay **test** keys to the local environment, then restart the API. Credentials are not bundled with this project. Google and phone sign-in remain unavailable until configured; email/password and the free local demo keep working.
+
+Razorpay handles payment details in its hosted checkout. ChainPass issues tickets only after checking a captured payment against the server-created order, amount, and currency. Railway reservations remain a separate free simulation. Refunds require operator handling; paid-ticket self-service cancellation is blocked so it cannot silently release inventory without handling the payment.
+
 ## Architecture and scaling
 
 ```mermaid
@@ -81,11 +89,15 @@ flowchart LR
   W[Anchoring worker] --> O
   W -->|idempotent commitment batch| E[EVM registry]
   A --> S[Static frontend assets]
+  B --> F[Firebase Authentication]
+  B --> R[Razorpay hosted checkout]
+  A -->|verify identity| F
+  R -->|signed webhook| A
 ```
 
 For development, SQLite replaces PostgreSQL. Production architecture separates stateless HTTP services from durable data and asynchronous blockchain work. Inventory changes, ticket issuance, and outbox insertion share one transaction. Database constraints, conditional updates, hashed sessions, and indexes provide the foundation for correctness across API replicas.
 
-**Scale is a property to measure.** This repository does not claim a tested throughput or availability SLA. SQLite is for single-process development. Before accepting public traffic, use PostgreSQL, configure gateway-level distributed rate limits, replace sandbox checkout with verified payment webhooks and reservation expiry, establish backups and monitoring, and run load and failover tests. See [architecture](docs/ARCHITECTURE.md), [deployment](docs/DEPLOYMENT.md), and [security](SECURITY.md).
+**Scale is a property to measure.** This repository does not claim a tested throughput or availability SLA. SQLite is for single-process development. Before accepting public traffic, use PostgreSQL, configure gateway-level distributed rate limits, validate the provider integration in your accounts, establish payment reconciliation and refund operations, backups and monitoring, and run load and failover tests. See [architecture](docs/ARCHITECTURE.md), [deployment](docs/DEPLOYMENT.md), and [security](SECURITY.md).
 
 ## Project map
 
@@ -105,6 +117,7 @@ Dockerfile             Reproducible Node 24 build
 ## Documentation
 
 - [API contract](docs/API-CONTRACT.md)
+- [Firebase Google/phone authentication and Razorpay payments](docs/AUTH-AND-PAYMENTS.md)
 - [Railway booking sandbox and its limits](docs/RAILWAY-BOOKING.md)
 - [Configuration](docs/CONFIGURATION.md)
 - [Architecture and data consistency](docs/ARCHITECTURE.md)

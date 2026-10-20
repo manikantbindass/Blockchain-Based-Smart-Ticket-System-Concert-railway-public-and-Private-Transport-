@@ -20,6 +20,15 @@ import {
 import { eventFrom, ticketFrom, userFrom } from "./models.js";
 import { seedDemo } from "./seed.js";
 import { registerRailRoutes } from "./rail.js";
+import {
+  paymentConfig,
+  registerPaymentRoutes,
+  type RazorpayGateway,
+} from "./payments.js";
+import {
+  registerFirebaseRoutes,
+  type FirebaseVerifier,
+} from "./firebase-auth.js";
 
 class HttpError extends Error {
   constructor(
@@ -82,6 +91,8 @@ export async function buildApp(
     config?: Partial<Config>;
     database?: Database;
     logger?: boolean;
+    razorpayGateway?: RazorpayGateway;
+    firebaseVerifier?: FirebaseVerifier;
   } = {},
 ) {
   const config = loadConfig(options.config);
@@ -122,16 +133,53 @@ export async function buildApp(
     contentSecurityPolicy: {
       directives: {
         defaultSrc: ["'self'"],
-        scriptSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "https://checkout.razorpay.com",
+          "https://www.google.com",
+          "https://www.gstatic.com",
+          "https://apis.google.com",
+          "https://www.recaptcha.net",
+        ],
         styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
         fontSrc: ["'self'", "https://fonts.gstatic.com"],
-        imgSrc: ["'self'", "data:", "blob:"],
-        connectSrc: ["'self'"],
+        imgSrc: [
+          "'self'",
+          "data:",
+          "blob:",
+          "https://*.razorpay.com",
+          "https://www.gstatic.com",
+          "https://www.google.com",
+        ],
+        connectSrc: [
+          "'self'",
+          "https://*.razorpay.com",
+          "https://identitytoolkit.googleapis.com",
+          "https://securetoken.googleapis.com",
+          "https://www.googleapis.com",
+          "https://www.google.com",
+          "https://www.recaptcha.net",
+          "https://*.firebaseapp.com",
+          ...(config.firebaseAuthDomain
+            ? [`https://${config.firebaseAuthDomain}`]
+            : []),
+        ],
+        frameSrc: [
+          "https://api.razorpay.com",
+          "https://checkout.razorpay.com",
+          "https://*.firebaseapp.com",
+          "https://www.google.com",
+          "https://www.recaptcha.net",
+          ...(config.firebaseAuthDomain
+            ? [`https://${config.firebaseAuthDomain}`]
+            : []),
+        ],
         objectSrc: ["'none'"],
         frameAncestors: ["'none'"],
         baseUri: ["'self'"],
       },
     },
+    crossOriginOpenerPolicy: { policy: "same-origin-allow-popups" },
   });
   await app.register(rateLimit, {
     max: 180,
@@ -361,11 +409,28 @@ export async function buildApp(
     ]);
     return { ok: true };
   });
+  registerFirebaseRoutes(app, db, config, {
+    session,
+    authenticate,
+    fail,
+    verifier: options.firebaseVerifier,
+  });
+  await registerPaymentRoutes(app, db, config, {
+    authenticate,
+    fail,
+    gateway: options.razorpayGateway,
+  });
   app.post(
     "/api/bookings",
     { config: { rateLimit: { max: 40, timeWindow: "1 minute" } } },
     async (request, reply) => {
       const user = await authenticate(request);
+      if (paymentConfig(config).enabled)
+        return fail(
+          409,
+          "PAYMENT_CHECKOUT_REQUIRED",
+          "Use the UPI/card checkout to confirm payment before tickets are issued.",
+        );
       if (!config.demoMode)
         return fail(
           503,
@@ -496,6 +561,17 @@ export async function buildApp(
         [id, user.id],
       );
       if (!row) return fail(404, "NOT_FOUND", "Ticket not found.");
+      if (
+        await tx.get(
+          "SELECT order_id FROM payment_tickets WHERE ticket_id = ?",
+          [id],
+        )
+      )
+        return fail(
+          409,
+          "PAID_CANCELLATION_REQUIRES_SUPPORT",
+          "Paid ticket cancellations require support and a verified refund. This ticket has not been cancelled or refunded.",
+        );
       if (row.status === "cancelled")
         return { ticket: await ticketFrom(row, tx, config.qrSecret) };
       if (row.status !== "valid")

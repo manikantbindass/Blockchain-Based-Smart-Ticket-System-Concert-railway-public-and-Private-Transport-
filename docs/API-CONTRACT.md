@@ -10,9 +10,18 @@ All endpoints below are prefixed with `/api`. JSON errors use `{error: string, m
 | GET    | /events/:id          |                                                                  | {event: Event}                                                                                                    |
 | POST   | /auth/register       | {name,email,password}                                            | Session                                                                                                           |
 | POST   | /auth/login          | {email,password}                                                 | Session                                                                                                           |
+| GET    | /auth/providers      | public                                                           | AuthProviders: public Firebase config and enabled providers |
+| POST   | /auth/firebase       | {idToken}                                                        | Session after server verification |
+| POST   | /auth/firebase/link  | bearer; {idToken,password}                                       | {user: User}; explicit linking after password and recent provider authentication |
 | GET    | /auth/me             | bearer                                                           | {user: User}                                                                                                      |
 | POST   | /auth/logout         | bearer                                                           | {ok:true}                                                                                                         |
 | POST   | /bookings            | bearer, Idempotency-Key header; {eventId,quantity}               | Booking                                                                                                           |
+| GET    | /payments/config     | public                                                           | PaymentConfig: enabled, mode, public key ID |
+| POST   | /payments/orders     | bearer, Idempotency-Key; {eventId,quantity}                       | PaymentOrder; amount derived server-side |
+| GET    | /payments/orders/:id | owner bearer                                                     | PaymentOrder reconciled with provider state |
+| GET    | /payments/orders     | bearer                                                           | {orders: PaymentOrder[]}; 20 most recent owned orders, including unresolved creation |
+| POST   | /payments/orders/:id/confirm | owner bearer; {razorpay_order_id,razorpay_payment_id,razorpay_signature} | PaymentOrder; booking only after verified capture |
+| POST   | /payments/webhook    | raw JSON with X-Razorpay-Signature; provider delivery             | Acknowledgement after signature validation and processing |
 | GET    | /tickets             | bearer                                                           | {tickets: Ticket[]}                                                                                               |
 | POST   | /tickets/:id/cancel  | bearer                                                           | {ticket: Ticket}                                                                                                  |
 | GET    | /verify/:code        | public                                                           | {valid:boolean,status:string,eventTitle:string,commitment:string,chainStatus:string,transactionHash:string\|null} |
@@ -20,7 +29,11 @@ All endpoints below are prefixed with `/api`. JSON errors use `{error: string, m
 | POST   | /organizer/events    | organizer bearer; event fields except id, remaining, organizerId | {event: Event}                                                                                                    |
 | POST   | /check-in            | organizer bearer; {qrPayload:string}                             | {ticket: Ticket}                                                                                                  |
 
-Local demo identities: `explorer@chainpass.local` / `Explore123!` and `organizer@chainpass.local` / `Organize123!`. Seed demo only outside production. Seed event IDs stable e.g. `evt-neon-nights`, city Bengaluru. Demo checkout books immediately with no real charge; production booking disabled until explicit deployment configuration permits a sandbox (a real PSP integration is not implemented).
+Local demo identities: `explorer@chainpass.local` / `Explore123!` and `organizer@chainpass.local` / `Organize123!`. Seed demo only outside production. Seed event IDs stable e.g. `evt-neon-nights`, city Bengaluru. Demo checkout books immediately with no real charge. When Razorpay is configured, catalog booking must use the payment endpoints; `/bookings` cannot bypass charging. Production checkout requires provider configuration. See [provider setup and limitations](AUTH-AND-PAYMENTS.md).
+
+`PaymentOrder.status` is `creating`, `pending`, `paid`, `expired`, or `refund_required`. It includes a `Booking` only after successful capture and fulfillment. Its amount is integer paise and its `mode` is `test` or `live`. Keep the original idempotency key when retrying order creation; keep the order ID when retrying a pending confirmation. Never infer ticket issuance from Razorpay's browser callback alone. Owned status retrieval can complete fulfillment after a lost callback.
+
+Google and phone login exchange a verified Firebase ID token for the same opaque session used by email login. Incoming identity attributes and roles are never trusted. A matching email does not implicitly merge accounts. Phone-only users expose `email:""` and optional `phone`; the internal placeholder email is not returned. Provider tokens and passwords must not be logged.
 
 Blockchain: registry anchors a bytes32 SHA-256 commitment per issued ticket. Database stores no fake transaction hashes. API transactional outbox is processed separately; disabled chain reports `disabled`. QR is a signed bearer credential; do not put it on-chain or in public verification results.
 

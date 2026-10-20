@@ -6,7 +6,8 @@ export function userFrom(row: Row): User {
   return {
     id: String(row.id),
     name: String(row.name),
-    email: String(row.email),
+    email: Number(row.email_is_placeholder) === 1 ? "" : String(row.email),
+    ...(row.phone ? { phone: String(row.phone) } : {}),
     role: row.role as User["role"],
   };
 }
@@ -46,6 +47,10 @@ export async function ticketFrom(
           [String(row.id)],
         )
       : undefined;
+  const payment = await db.get(
+    "SELECT p.order_id,o.mode FROM payment_tickets p JOIN payment_orders o ON o.id = p.order_id WHERE p.ticket_id = ?",
+    [String(row.id)],
+  );
   return {
     id: String(row.id),
     eventId: String(row.event_id),
@@ -59,6 +64,14 @@ export async function ticketFrom(
     commitment: String(row.commitment),
     chainStatus: row.chain_status as Ticket["chainStatus"],
     transactionHash: row.transaction_hash ? String(row.transaction_hash) : null,
+    ...(payment
+      ? {
+          payment: {
+            orderId: String(payment.order_id),
+            mode: payment.mode as "test" | "live",
+          },
+        }
+      : {}),
     ...(rail
       ? { rail: JSON.parse(String(rail.details)) as Ticket["rail"] }
       : {}),

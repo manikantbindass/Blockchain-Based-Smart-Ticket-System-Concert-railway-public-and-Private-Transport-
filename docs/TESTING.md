@@ -2,6 +2,8 @@
 
 Run `npm ci`, then `npm run check` for type checking, API tests, local-EVM contract tests, and production builds. API tests use an isolated in-memory SQLite database; no development tickets are modified. Contract tests use a fresh in-process Hardhat chain, not the chain on port 8545.
 
+The dependency overrides retain Rollup `4.64.10`: the `4.64.12` registry release was missing its Windows x64 MSVC binary during validation. Remove this pin only after checking native-package availability and builds on Windows and Linux. Firebase's transitive gRPC security override is documented in [Security](../SECURITY.md).
+
 The API suite exercises password/session handling, role escalation, ownership, concurrent inventory contention, idempotency collisions and retries, cancellation, public-response privacy, QR tampering, replay prevention, expired tickets, production configuration, and outbox retry/crash recovery.
 
 Railway coverage adds test-identity challenge ownership, expiry, attempt limits, replacement/replay protection, production gating, generic-checkout bypass rejection, per-journey inventory, seat allocation, idempotent reservations, and passenger cancellation. The railway browser journey exercises search through printable confirmation and wallet cancellation with test data only.
@@ -9,6 +11,10 @@ Railway coverage adds test-identity challenge ownership, expiry, attempt limits,
 For PostgreSQL verification, set `TEST_DATABASE_URL` to a test database whose user can create and drop schemas, then run `npm test -w @chainpass/api`. Tests create a unique schema and remove only that schema on cleanup. Use a dedicated test database.
 
 ## Browser workflows
+
+Firebase tests inject an ID-token verifier and exercise local account/session mapping, verified claims, forbidden providers, explicit linking, password confirmation, and concurrent registrations. Razorpay tests inject the remote gateway while exercising real HTTP routes, SQL transactions, signatures, amount/currency/capture checks, expiring holds, concurrent fulfillment, and ambiguous-request recovery. These tests use no real customer identities or money.
+
+Provider browser tests mock only the hosted checkout and payment API responses. They verify disabled-provider messaging, email fallback, server-confirmation gating, same-order retries, tab recovery, wallet recovery, and a failed checkout window. They do not claim real Google, SMS, or bank authorization has been exercised; use the acceptance checks in [provider setup](AUTH-AND-PAYMENTS.md).
 
 ```bash
 npm run build

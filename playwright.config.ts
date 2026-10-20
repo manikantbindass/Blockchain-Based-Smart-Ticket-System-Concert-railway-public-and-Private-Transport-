@@ -43,6 +43,13 @@ export default defineConfig({
       DEMO_MODE: "true",
       BLOCKCHAIN_ENABLED: "false",
       WEB_ORIGIN: "http://127.0.0.1:4173",
+      FIREBASE_PROJECT_ID: "",
+      FIREBASE_API_KEY: "",
+      FIREBASE_AUTH_DOMAIN: "",
+      FIREBASE_APP_ID: "",
+      RAZORPAY_KEY_ID: "",
+      RAZORPAY_KEY_SECRET: "",
+      RAZORPAY_WEBHOOK_SECRET: "",
     },
   },
 });

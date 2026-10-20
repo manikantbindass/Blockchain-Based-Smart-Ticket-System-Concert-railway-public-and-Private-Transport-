@@ -4,6 +4,7 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  phone?: string;
   role: Role;
 }
 export interface Event {
@@ -38,6 +39,10 @@ export interface Ticket {
   chainStatus: "pending" | "anchored" | "disabled";
   transactionHash: string | null;
   rail?: RailTicketDetails;
+  payment?: {
+    orderId: string;
+    mode: "test" | "live";
+  };
 }
 
 export type RailClassCode = "SL" | "3A" | "2A" | "CC" | "EC";
@@ -150,6 +155,39 @@ export interface RailBooking extends Booking {
 export interface Session {
   token: string;
   user: User;
+}
+export interface AuthProviders {
+  firebase: {
+    apiKey: string;
+    authDomain: string;
+    projectId: string;
+    appId: string;
+    messagingSenderId?: string;
+    storageBucket?: string;
+  } | null;
+  google: boolean;
+  phone: boolean;
+}
+export interface PaymentConfig {
+  enabled: boolean;
+  mode: "disabled" | "test" | "live";
+  keyId?: string;
+}
+export interface CheckoutRequest {
+  eventId: string;
+  quantity: number;
+}
+export interface PaymentOrder {
+  id: string;
+  providerOrderId: string;
+  keyId: string;
+  /** Integer minor units (paise). */
+  amount: number;
+  currency: "INR";
+  status: "creating" | "pending" | "paid" | "expired" | "refund_required";
+  expiresAt: string;
+  mode: "test" | "live";
+  booking?: Booking;
 }
 export interface Booking {
   tickets: Ticket[];
