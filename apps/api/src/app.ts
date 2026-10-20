@@ -133,7 +133,16 @@ export async function buildApp(
       },
     },
   });
-  await app.register(rateLimit, { max: 180, timeWindow: "1 minute" });
+  await app.register(rateLimit, {
+    max: 180,
+    timeWindow: "1 minute",
+    // Static assets must not spend the API budget. Use the matched route,
+    // not a caller-controlled URL, so API aliases cannot bypass the limiter.
+    allowList: (request) => {
+      const route = request.routeOptions.url;
+      return route !== undefined && !route.startsWith("/api/");
+    },
+  });
   app.setErrorHandler((error, request, reply) => {
     if (error instanceof z.ZodError)
       return reply.code(400).send({
